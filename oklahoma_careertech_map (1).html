@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Oklahoma CareerTech Interactive Map</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<style>
+  :root {
+    --panel-bg: #ffffff;
+    --border-color: #d8dee4;
+    --text-main: #1f2937;
+    --text-sub: #6b7280;
+    --accent: #2c5f8a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text-main);
+  }
+  #app {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+  }
+  #sidebar {
+    width: 320px;
+    min-width: 260px;
+    max-width: 380px;
+    background: var(--panel-bg);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    z-index: 500;
+  }
+  #sidebar-header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  #sidebar-header h1 {
+    font-size: 16px;
+    margin: 0 0 2px;
+    color: var(--accent);
+  }
+  #sidebar-header p {
+    font-size: 11.5px;
+    color: var(--text-sub);
+    margin: 0;
+  }
+  #search-box {
+    width: 100%;
+    padding: 8px 10px;
+    margin-top: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  #filter-controls {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    gap: 6px;
+  }
+  #filter-controls button {
+    flex: 1;
+    font-size: 11px;
+    padding: 5px 4px;
+    border: 1px solid var(--border-color);
+    background: #f3f4f6;
+    border-radius: 5px;
+    cursor: pointer;
+    color: var(--text-main);
+  }
+  #filter-controls button:hover { background: #e5e7eb; }
+  #active-filter-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #eef4fa;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 12px;
+  }
+  #active-filter-label { font-weight: 600; color: var(--accent); }
+  #clear-filter {
+    font-size: 11px;
+    padding: 4px 8px;
+    border: 1px solid var(--accent);
+    background: white;
+    color: var(--accent);
+    border-radius: 5px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  #clear-filter:hover { background: var(--accent); color: white; }
+  .district-header.active-district {
+    background: #eef4fa;
+  }
+  #district-list {
+    overflow-y: auto;
+    flex: 1;
+    padding: 6px 0;
+  }
+  .district-group {
+    border-bottom: 1px solid #eef0f2;
+  }
+  .district-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .district-header:hover { background: #f7f8fa; }
+  .color-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,0.15);
+    cursor: pointer;
+  }
+  .district-name {
+    cursor: pointer;
+  }
+  .district-name:hover {
+    text-decoration: underline;
+    color: var(--accent);
+  }
+  .district-header .count {
+    margin-left: auto;
+    font-weight: 400;
+    color: var(--text-sub);
+    font-size: 11px;
+  }
+  .campus-item {
+    padding: 6px 16px 6px 34px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--text-sub);
+    border-left: 3px solid transparent;
+  }
+  .campus-item:hover {
+    background: #f0f4f8;
+    color: var(--text-main);
+    border-left-color: var(--accent);
+  }
+  .campus-item .campus-name { font-weight: 500; color: var(--text-main); }
+  .campus-item .campus-city { font-size: 11px; }
+  .hidden { display: none !important; }
+  #map { flex: 1; }
+  .leaflet-popup-content { font-size: 13px; min-width: 190px; }
+  .popup-district {
+    font-weight: 700;
+    font-size: 13.5px;
+    margin-bottom: 2px;
+  }
+  .popup-campus {
+    font-size: 11.5px;
+    color: var(--text-sub);
+    margin-bottom: 6px;
+  }
+  .popup-row { margin: 3px 0; font-size: 12.5px; }
+  .popup-row a { color: var(--accent); text-decoration: none; }
+  #no-results {
+    padding: 20px 16px;
+    color: var(--text-sub);
+    font-size: 12.5px;
+    text-align: center;
+  }
+  @media (max-width: 700px) {
+    #app { flex-direction: column; }
+    #sidebar { width: 100%; max-width: 100%; height: 40%; border-right: none; border-bottom: 1px solid var(--border-color); }
+    #map { flex: 1; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <h1>Oklahoma CareerTech</h1>
+      <p>29 districts &middot; 64 campus locations</p>
+      <input type="text" id="search-box" placeholder="Search campus, city, or district..." />
+    </div>
+    <div id="filter-controls">
+      <button id="expand-all">Expand All</button>
+      <button id="collapse-all">Collapse All</button>
+    </div>
+    <div id="active-filter-bar" class="hidden">
+      <span id="active-filter-label"></span>
+      <button id="clear-filter">Show All</button>
+    </div>
+    <div id="district-list"></div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script>
+// ---- Data: district -> color, campuses with lat/lng ----
+const districts = [
+  { name: "Autry", color: "#5b8fb0", campuses: [
+    { name: "Autry Technology Center", city: "Enid", address: "1201 W. Willow St., Enid, OK 73703", phone: "580.242.2750", site: "www.autrytech.edu", lat: 36.4190559, lng: -97.8974685 }
+  ]},
+  { name: "Caddo Kiowa", color: "#8fb85b", campuses: [
+    { name: "Caddo Kiowa Technology Center", city: "Fort Cobb", address: "1415 N. Seventh St, Fort Cobb, OK 73038", phone: "405.643.5511", site: "www.cktc.edu", lat: 35.108303, lng: -98.4443435 }
+  ]},
+  { name: "Canadian Valley", color: "#d4b03c", campuses: [
+    { name: "Chickasha Campus", city: "Chickasha", address: "1401 Michigan, Chickasha, OK 73018", phone: "405.224.7220", site: "www.cvtech.edu", lat: 35.0564651, lng: -97.9497833 },
+    { name: "Cowan Campus", city: "Yukon", address: "1701 S. Czech Hall, Yukon, OK 73099", phone: "405.345.3333", site: "www.cvtech.edu", lat: 35.4491799, lng: -97.7433898 },
+    { name: "El Reno Campus", city: "El Reno", address: "6505 E. Hwy. 66, El Reno, OK 73036", phone: "405.262.2629", site: "www.cvtech.edu", lat: 35.5090912, lng: -97.8828668 }
+  ]},
+  { name: "Central", color: "#8e5ba8", campuses: [
+    { name: "Drumright Campus", city: "Drumright", address: "3 CT Circle, Drumright, OK 74030", phone: "918.352.2551", site: "www.centraltech.edu", lat: 35.9940338, lng: -96.5853458 },
+    { name: "Sapulpa Campus", city: "Sapulpa", address: "1720 S. Main, Sapulpa, OK 74066", phone: "918.224.9300", site: "www.centraltech.edu", lat: 35.977951, lng: -96.1144714 }
+  ]},
+  { name: "Chisholm Trail", color: "#c25a97", campuses: [
+    { name: "Chisholm Trail Technology Center", city: "Omega", address: "283 State Hwy. 33, Omega, OK 73764", phone: "405.729.8324", site: "www.cttc.edu", lat: 35.8421783, lng: -98.2024993 }
+  ]},
+  { name: "Eastern Oklahoma County", color: "#7a5240", campuses: [
+    { name: "Eastern Oklahoma County Tech Center", city: "Choctaw", address: "4601 N. Choctaw, Choctaw, OK 73020", phone: "405.390.9591", site: "www.eoctech.edu", lat: 35.5168965, lng: -97.2669884 }
+  ]},
+  { name: "Francis Tuttle", color: "#3f7a3f", campuses: [
+    { name: "Danforth Campus", city: "Edmond", address: "3841 E. Danforth, Edmond, OK 73034", phone: "405.717.4900", site: "www.francistuttle.edu", lat: 35.6685812, lng: -97.4308079 },
+    { name: "Portland Campus", city: "Oklahoma City", address: "3500 N.W. 150th, Oklahoma City, OK 73134", phone: "405.717.4900", site: "www.francistuttle.edu", lat: 35.622262, lng: -97.582605 },
+    { name: "Reno Campus", city: "Oklahoma City", address: "7301 W. Reno, Oklahoma City, OK 73127", phone: "405.717.4900", site: "www.francistuttle.edu", lat: 35.465393, lng: -97.640701 },
+    { name: "Rockwell Campus", city: "Oklahoma City", address: "12777 N. Rockwell, Oklahoma City, OK 73142", phone: "405.717.4900", site: "www.francistuttle.edu", lat: 35.6005273, lng: -97.63997 }
+  ]},
+  { name: "Gordon Cooper", color: "#3c8a8a", campuses: [
+    { name: "Main Campus", city: "Shawnee", address: "1 J C Bruton Blvd, Shawnee, OK 74804", phone: "405.273.7493", site: "www.gctech.edu", lat: 35.379409, lng: -96.907804 },
+    { name: "Aviation Campus", city: "Shawnee", address: "2600 Airport Dr., Shawnee, OK 74804", phone: "405.273.7493", site: "www.gctech.edu", lat: 35.3611253, lng: -96.9393778 },
+    { name: "Seminole Campus", city: "Seminole", address: "800 Harvey Road, Seminole, OK 74868", phone: "405.303.2886", site: "www.gctech.edu", lat: 35.2307797, lng: -96.65234 }
+  ]},
+  { name: "Great Plains", color: "#b0763c", campuses: [
+    { name: "Frederick Campus", city: "Frederick", address: "2001 E. Gladstone, Frederick, OK 73542", phone: "580.355.5525", site: "www.greatplains.edu", lat: 34.393013, lng: -98.9948043 },
+    { name: "Lawton Campus", city: "Lawton", address: "4500 S.W. Lee Blvd., Lawton, OK 73505", phone: "580.355.6371", site: "www.greatplains.edu", lat: 34.5935819, lng: -98.4512306 }
+  ]},
+  { name: "Green Country", color: "#4a7d4a", campuses: [
+    { name: "Green Country Technology Center", city: "Okmulgee", address: "1100 Ok-56 Loop, Okmulgee, OK 74447", phone: "918.758.0840", site: "www.gctcok.edu", lat: 35.632974, lng: -95.9364 }
+  ]},
+  { name: "High Plains", color: "#9d9d5c", campuses: [
+    { name: "High Plains Technology Center", city: "Woodward", address: "3921 34th, Woodward, OK 73801", phone: "580.256.6618", site: "www.hptc.edu", lat: 36.406173, lng: -99.42716 }
+  ]},
+  { name: "Indian Capital", color: "#2f6f6f", campuses: [
+    { name: "Coweta Campus", city: "Coweta", address: "31350 State Hwy. 51, Coweta, OK 74429", phone: "918.897.3734", site: "www.ictc.edu", lat: 35.950306, lng: -95.6237862 },
+    { name: "Muskogee Campus", city: "Muskogee", address: "2403 N. 41st St. East, Muskogee, OK 74403", phone: "918.687.6383", site: "www.ictc.edu", lat: 35.775329, lng: -95.311653 },
+    { name: "Sallisaw Campus", city: "Sallisaw", address: "401 E Houser Blvd., Sallisaw, OK 74955", phone: "918.775.9119", site: "www.ictc.edu", lat: 35.446422, lng: -94.793264 },
+    { name: "Stilwell Campus", city: "Stilwell", address: "470826 E. 810 Road, Stilwell, OK 74960", phone: "918.696.3111", site: "www.ictc.edu", lat: 35.8409631, lng: -94.6340988 },
+    { name: "Tahlequah Campus", city: "Tahlequah", address: "240 CareerTech Way, Tahlequah, OK 74464", phone: "918.456.2594", site: "www.ictc.edu", lat: 35.9202575, lng: -94.9914321 }
+  ]},
+  { name: "Kiamichi", color: "#6b4f8a", campuses: [
+    { name: "Atoka Campus", city: "Atoka", address: "1763 W. Liberty, Atoka, OK 74525", phone: "580.889.7321", site: "www.ktc.edu", lat: 34.3953142, lng: -96.153291 },
+    { name: "Durant Campus", city: "Durant", address: "810 Waldron, Durant, OK 74701", phone: "580.924.7081", site: "www.ktc.edu", lat: 33.9461665, lng: -96.4061863 },
+    { name: "Hugo Campus", city: "Hugo", address: "107 S. 15th, Hugo, OK 74743", phone: "580.326.6491", site: "www.ktc.edu", lat: 34.0085816, lng: -95.4952102 },
+    { name: "Idabel Campus", city: "Idabel", address: "3205 Lincoln Rd. N.E., Idabel, OK 74745", phone: "580.286.7555", site: "www.ktc.edu", lat: 33.9217506, lng: -94.7751082 },
+    { name: "McAlester Campus", city: "McAlester", address: "301 Kiamichi Dr., McAlester, OK 74501", phone: "918.426.0940", site: "www.ktc.edu", lat: 34.9248096, lng: -95.7456658 },
+    { name: "Poteau Campus", city: "Poteau", address: "1509 S. McKenna, Poteau, OK 74953", phone: "918.647.4525", site: "www.ktc.edu", lat: 35.0379166, lng: -94.635715 },
+    { name: "Spiro Campus", city: "Spiro", address: "610 S.W. Third, Spiro, OK 74959", phone: "918.962.3722", site: "www.ktc.edu", lat: 35.2382011, lng: -94.6292037 },
+    { name: "Stigler Campus", city: "Stigler", address: "1410 Old Military Rd., Stigler, OK 74462", phone: "918.967.2801", site: "www.ktc.edu", lat: 35.2481688, lng: -95.1082027 },
+    { name: "Talihina Campus", city: "Talihina", address: "13739 S.E. 202, Talihina, OK 74571", phone: "918.567.2264", site: "www.ktc.edu", lat: 34.7577896, lng: -95.0842208 }
+  ]},
+  { name: "Meridian", color: "#b0533c", campuses: [
+    { name: "Main Campus", city: "Stillwater", address: "1312 S. Sangre, Stillwater, OK 74074", phone: "405.377.3333", site: "www.meridiantech.edu", lat: 36.1068788, lng: -97.1070083 },
+    { name: "South Campus", city: "Guthrie", address: "3025 S. Division, Guthrie, OK 73044", phone: "405.377.3334", site: "www.meridiantech.edu", lat: 35.8471908, lng: -97.4264831 }
+  ]},
+  { name: "Metro Tech", color: "#3c6e8a", campuses: [
+    { name: "Aviation Career Center", city: "Oklahoma City", address: "5600 S. MacArthur, Oklahoma City, OK 73179", phone: "405.595.5501", site: "www.metrotech.edu", lat: 35.4097978, lng: -97.6171802 },
+    { name: "South Bryant Campus", city: "Oklahoma City", address: "4901 S. Bryant, Oklahoma City, OK 73129", phone: "405.595.2202", site: "www.metrotech.edu", lat: 35.4149331, lng: -97.4618111 },
+    { name: "Springlake Campus", city: "Oklahoma City", address: "1900 Springlake Dr., Oklahoma City, OK 73111", phone: "405.424.8324", site: "www.metrotech.edu", lat: 35.5125339, lng: -97.4787444 }
+  ]},
+  { name: "Mid-America", color: "#8a6b3c", campuses: [
+    { name: "Mid-America Technology Center", city: "Wayne", address: "27438 State Hwy. 59, Wayne, OK 73095", phone: "572.215.2060", site: "www.matech.edu", lat: 34.912526, lng: -97.3640636 }
+  ]},
+  { name: "Mid-Del", color: "#2c4f7a", campuses: [
+    { name: "Main Campus", city: "Midwest City", address: "1621 Maple Dr., Midwest City, OK 73110", phone: "405.739.1707", site: "www.middeltech.com", lat: 35.4547948, lng: -97.4017609 },
+    { name: "Tinker Training Center", city: "Oklahoma City", address: "7605 5th St./Tinker AFB, Oklahoma City, OK 73145", phone: "405.739.1707", site: "www.middeltech.com", lat: 35.4547948, lng: -97.4017609 }
+  ]},
+  { name: "Moore Norman", color: "#5c8a3c", campuses: [
+    { name: "Moore Norman Technology Center", city: "Norman", address: "4701 12th Ave. N.W., Norman, OK 73069", phone: "405.801.5000", site: "www.mntc.edu", lat: 35.2749281, lng: -97.4572624 }
+  ]},
+  { name: "Northeast", color: "#3c8a5c", campuses: [
+    { name: "Afton Campus", city: "Afton", address: "19901 S. Hwy. 69, Afton, OK 74331", phone: "918.257.8324", site: "www.netech.edu", lat: 36.730225, lng: -94.9288188 },
+    { name: "Claremore Campus", city: "Claremore", address: "1901 N. Hwy. 88, Claremore, OK 74017", phone: "918.342.8066", site: "www.netech.edu", lat: 36.3272005, lng: -95.6339126 },
+    { name: "Kansas Campus", city: "Kansas", address: "450 N. Hwy. 59, Kansas, OK 74347", phone: "918.868.3535", site: "www.netech.edu", lat: 36.209587, lng: -94.7784194 },
+    { name: "Pryor Campus", city: "Pryor", address: "6195 W. Hwy. 20, Pryor, OK 74361", phone: "918.825.5555", site: "www.netech.edu", lat: 36.308986, lng: -95.4251 }
+  ]},
+  { name: "Northwest", color: "#8a3c5c", campuses: [
+    { name: "Alva Campus", city: "Alva", address: "1801 S. 11th, Alva, OK 73717", phone: "580.327.0344", site: "www.nwtech.edu", lat: 36.7869458, lng: -98.6757901 },
+    { name: "Fairview Campus", city: "Fairview", address: "801 Votech Dr., Fairview, OK 73737", phone: "580.227.3708", site: "www.nwtech.edu", lat: 36.2616227, lng: -98.4971263 }
+  ]},
+  { name: "Pioneer", color: "#c23c3c", campuses: [
+    { name: "Pioneer Technology Center", city: "Ponca City", address: "2101 N. Ash, Ponca City, OK 74601", phone: "580.762.8336", site: "www.pioneertech.edu", lat: 36.728115, lng: -97.0932235 }
+  ]},
+  { name: "Pontotoc", color: "#7a3c8a", campuses: [
+    { name: "Pontotoc Technology Center", city: "Ada", address: "601 W. 33rd, Ada, OK 74820", phone: "580.310.2200", site: "www.pontotoctech.edu", lat: 34.7482325, lng: -96.6838159 }
+  ]},
+  { name: "Red River", color: "#3c5c8a", campuses: [
+    { name: "Red River Technology Center", city: "Duncan", address: "3300 W Bois D' Arc, Duncan, OK 73533", phone: "580.255.2903", site: "www.rrtc.edu", lat: 34.4913519, lng: -97.9903849 }
+  ]},
+  { name: "Southern", color: "#3c8ac2", campuses: [
+    { name: "Southern Technology Center", city: "Ardmore", address: "2610 Sam Noble Pkwy., Ardmore, OK 73401", phone: "580.223.2070", site: "www.sotc.edu", lat: 34.1866607, lng: -97.0829443 }
+  ]},
+  { name: "Southwest", color: "#c25a3c", campuses: [
+    { name: "Southwest Technology Center", city: "Altus", address: "711 W. Tamarack, Altus, OK 73521", phone: "580.477.2250", site: "www.swtech.edu", lat: 34.668189, lng: -99.3412107 }
+  ]},
+  { name: "Tri County", color: "#3c8a7a", campuses: [
+    { name: "Tri County Technology Center", city: "Bartlesville", address: "6101 S.E. Nowata, Bartlesville, OK 74006", phone: "918.333.2422", site: "www.tricountytech.edu", lat: 36.7265853, lng: -95.9085149 }
+  ]},
+  { name: "Tulsa Tech", color: "#4a6fa8", campuses: [
+    { name: "Broken Arrow Campus", city: "Broken Arrow", address: "4000 W. Florence, Broken Arrow, OK 74011", phone: "918.828.3000", site: "www.tulsatech.edu", lat: 36.0049705, lng: -95.8383789 },
+    { name: "Lemley Campus", city: "Tulsa", address: "3638 S. Memorial Dr., Tulsa, OK 74145", phone: "918.828.1000", site: "www.tulsatech.edu", lat: 36.1126203, lng: -95.8888526 },
+    { name: "Owasso Campus", city: "Owasso", address: "10800 N. 137th East Ave., Owasso, OK 74055", phone: "918.828.1400", site: "www.tulsatech.edu", lat: 36.3130104, lng: -95.8184926 },
+    { name: "Peoria Campus", city: "Tulsa", address: "3850 N. Peoria, Tulsa, OK 74106", phone: "918.828.2000", site: "www.tulsatech.edu", lat: 36.2106513, lng: -95.9765319 },
+    { name: "Riverside Campus", city: "Tulsa", address: "801 E. 91st, Tulsa, OK 74132", phone: "918.828.4000", site: "www.tulsatech.edu", lat: 36.0338879, lng: -95.9821617 },
+    { name: "Sand Springs Campus", city: "Sand Springs", address: "924 E. Charles Page Blvd., Sand Springs, OK 74063", phone: "918.828.1300", site: "www.tulsatech.edu", lat: 36.1375305, lng: -96.0958902 }
+  ]},
+  { name: "Wes Watkins", color: "#8a7a3c", campuses: [
+    { name: "Wes Watkins Technology Center", city: "Wetumka", address: "7892 Hwy. 9, Wetumka, OK 74883", phone: "405.452.5500", site: "www.wwtech.edu", lat: 35.2335014, lng: -96.2666972 }
+  ]},
+  { name: "Western", color: "#a83c6f", campuses: [
+    { name: "Burns Flat Campus", city: "Burns Flat", address: "621 Sooner Dr., Burns Flat, OK 73624", phone: "580.562.3181", site: "www.westtech.edu", lat: 35.352962, lng: -99.1804745 },
+    { name: "Sayre Campus", city: "Sayre", address: "2002 N.E. Hwy. 66, Sayre, OK 73662", phone: "580.928.2097", site: "www.westtech.edu", lat: 35.3138084, lng: -99.6173248 }
+  ]}
+];
+
+// ---- Build the map ----
+const map = L.map('map', { zoomControl: true }).setView([35.55, -97.3], 7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  maxZoom: 18
+}).addTo(map);
+
+function makeIcon(color) {
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="
+      background:${color};
+      width:16px;height:16px;border-radius:50%;
+      border:2px solid white;
+      box-shadow:0 1px 3px rgba(0,0,0,0.4);
+    "></div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+    popupAnchor: [0, -8]
+  });
+}
+
+const markerRegistry = []; // { marker, districtName, campusName, city, searchText, el }
+let activeDistrict = null; // name of currently isolated district, or null for "show all"
+
+districts.forEach(d => {
+  d.campuses.forEach(c => {
+    const marker = L.marker([c.lat, c.lng], { icon: makeIcon(d.color) }).addTo(map);
+    const popupHtml = `
+      <div class="popup-district">${d.name}</div>
+      <div class="popup-campus">${c.name !== d.name + ' Technology Center' ? c.name : ''}</div>
+      <div class="popup-row">${c.address}</div>
+      <div class="popup-row">📞 <a href="tel:${c.phone.replace(/[^0-9]/g,'')}">${c.phone}</a></div>
+      <div class="popup-row">🌐 <a href="https://${c.site}" target="_blank">${c.site}</a></div>
+    `;
+    marker.bindPopup(popupHtml);
+    markerRegistry.push({
+      marker, district: d.name, campus: c.name, city: c.city,
+      searchText: (d.name + ' ' + c.name + ' ' + c.city).toLowerCase()
+    });
+  });
+});
+
+// ---- Sidebar ----
+const listEl = document.getElementById('district-list');
+
+function renderList(filterText) {
+  listEl.innerHTML = '';
+  const ft = (filterText || '').trim().toLowerCase();
+  let anyVisible = false;
+
+  districts.forEach(d => {
+    const matchingCampuses = d.campuses.filter(c =>
+      !ft || (d.name + ' ' + c.name + ' ' + c.city).toLowerCase().includes(ft)
+    );
+    if (matchingCampuses.length === 0) return;
+    anyVisible = true;
+
+    const group = document.createElement('div');
+    group.className = 'district-group';
+
+    const header = document.createElement('div');
+    header.className = 'district-header';
+    if (activeDistrict === d.name) header.classList.add('active-district');
+    header.innerHTML = `<span class="color-dot" style="background:${d.color}"></span><span class="district-name">${d.name}</span><span class="count">${d.campuses.length}</span>`;
+    group.appendChild(header);
+
+    const itemsWrap = document.createElement('div');
+    itemsWrap.className = 'campus-items';
+    if (!ft && activeDistrict !== d.name) itemsWrap.classList.add('hidden'); // collapsed by default unless searching or filtered on
+
+    matchingCampuses.forEach(c => {
+      const item = document.createElement('div');
+      item.className = 'campus-item';
+      item.innerHTML = `<div class="campus-name">${c.name}</div><div class="campus-city">${c.city}</div>`;
+      item.addEventListener('click', () => {
+        map.setView([c.lat, c.lng], 13, { animate: true });
+        const reg = markerRegistry.find(r => r.district === d.name && r.campus === c.name && r.city === c.city);
+        if (reg) reg.marker.openPopup();
+      });
+      itemsWrap.appendChild(item);
+    });
+
+    // Clicking the color dot or district name isolates that district on the map.
+    const nameSpan = header.querySelector('.district-name');
+    nameSpan.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setActiveDistrict(d.name);
+    });
+    header.querySelector('.color-dot').addEventListener('click', (e) => {
+      e.stopPropagation();
+      setActiveDistrict(d.name);
+    });
+    // Clicking the count or empty header space just expands/collapses.
+    header.addEventListener('click', () => {
+      itemsWrap.classList.toggle('hidden');
+    });
+
+    group.appendChild(itemsWrap);
+    listEl.appendChild(group);
+  });
+
+  if (!anyVisible) {
+    listEl.innerHTML = '<div id="no-results">No campuses match your search.</div>';
+  }
+}
+
+function setActiveDistrict(districtName) {
+  activeDistrict = districtName;
+
+  // Show/hide markers on the map
+  markerRegistry.forEach(r => {
+    if (r.district === districtName) {
+      if (!map.hasLayer(r.marker)) r.marker.addTo(map);
+    } else {
+      if (map.hasLayer(r.marker)) map.removeLayer(r.marker);
+    }
+  });
+
+  // Zoom to fit that district's markers
+  const matches = markerRegistry.filter(r => r.district === districtName);
+  if (matches.length === 1) {
+    map.setView(matches[0].marker.getLatLng(), 12, { animate: true });
+  } else if (matches.length > 1) {
+    const bounds = L.latLngBounds(matches.map(r => r.marker.getLatLng()));
+    map.fitBounds(bounds, { padding: [40, 40] });
+  }
+
+  // Update the filter bar
+  const bar = document.getElementById('active-filter-bar');
+  const label = document.getElementById('active-filter-label');
+  label.textContent = 'Showing: ' + districtName;
+  bar.classList.remove('hidden');
+
+  renderList(document.getElementById('search-box').value);
+}
+
+function clearActiveDistrict() {
+  activeDistrict = null;
+  markerRegistry.forEach(r => {
+    if (!map.hasLayer(r.marker)) r.marker.addTo(map);
+  });
+  document.getElementById('active-filter-bar').classList.add('hidden');
+  map.setView([35.55, -97.3], 7, { animate: true });
+  renderList(document.getElementById('search-box').value);
+}
+
+document.getElementById('clear-filter').addEventListener('click', clearActiveDistrict);
+
+renderList('');
+
+document.getElementById('search-box').addEventListener('input', (e) => {
+  renderList(e.target.value);
+});
+
+document.getElementById('expand-all').addEventListener('click', () => {
+  document.querySelectorAll('.campus-items').forEach(el => el.classList.remove('hidden'));
+});
+document.getElementById('collapse-all').addEventListener('click', () => {
+  document.querySelectorAll('.campus-items').forEach(el => el.classList.add('hidden'));
+});
+</script>
+</body>
+</html>
